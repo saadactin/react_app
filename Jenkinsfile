@@ -1,8 +1,9 @@
 pipeline {
     agent any
-tools {
-    nodejs 'NodeJS' // Name must exactly match Jenkins Global Tool Configuration
-}
+
+    tools {
+        nodejs 'NodeJS' // Must match the NodeJS installation name in Jenkins Global Tool Configuration (use Node 22.13.1)
+    }
 
     environment {
         SONAR_TOKEN = credentials('sonar-token')
@@ -17,7 +18,7 @@ tools {
             steps {
                 git branch: 'main',
                     url: 'https://github.com/saadactin/react_app.git',
-                    credentialsId: 'github-credentials' // Add GitHub credentials in Jenkins
+                    credentialsId: 'github-credentials' // GitHub credentials configured in Jenkins
             }
         }
 
