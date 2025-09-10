@@ -1,13 +1,17 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'node:20-bullseye' // NodeJS + Debian
+            args '-u root:root'      // Run as root
+        }
+    }
 
     tools {
-        nodejs 'NodeJS'  // must exactly match Jenkins NodeJS installation
+        nodejs 'NodeJS'
     }
 
     environment {
         SONAR_TOKEN = credentials('sonar-token')
-        AMPLIFY_APP_ID = credentials('amplify-app-id')
         AWS_CREDENTIALS = 'aws-jenkins'
         S3_BUCKET = 'lambdafunctionartifacts3'
         REGION = 'ap-south-1'
@@ -17,8 +21,7 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main',
-                    url: 'https://github.com/saadactin/react_app.git',
-                    credentialsId: 'github-credentials'
+                    url: 'https://github.com/saadactin/react_app.git'
             }
         }
 
@@ -52,11 +55,7 @@ pipeline {
         stage('Zip Build') {
             steps {
                 sh '''
-                # Install zip if not present
-                if ! command -v zip &> /dev/null
-                then
-                    apt-get update && apt-get install -y zip
-                fi
+                apt-get update && apt-get install -y zip
                 cd dist
                 zip -r ../build.zip .
                 '''
