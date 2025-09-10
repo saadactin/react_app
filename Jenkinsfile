@@ -1,9 +1,8 @@
 pipeline {
     agent any
-
-    tools {
-        nodejs 'NodeJS' // Name of NodeJS configured in Jenkins Global Tool Configuration
-    }
+tools {
+    nodejs 'NodeJS' // Name must exactly match Jenkins Global Tool Configuration
+}
 
     environment {
         SONAR_TOKEN = credentials('sonar-token')
