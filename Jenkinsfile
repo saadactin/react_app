@@ -1,15 +1,14 @@
 pipeline {
-    agent {
-        docker {
-            image 'node:22.13.1' // Node pre-installed in Docker
-            args '-u root:root'   // Optional: run as root for npm permissions
-        }
+    agent any
+
+    tools {
+        nodejs 'NodeJS_22.13.1'  // must match Jenkins Global Tool name
     }
 
     environment {
         SONAR_TOKEN = credentials('sonar-token')
         AMPLIFY_APP_ID = credentials('amplify-app-id')
-        AWS_CREDENTIALS = 'aws-jenkins'  // AWS credentials ID in Jenkins
+        AWS_CREDENTIALS = 'aws-jenkins'
         S3_BUCKET = 'lambdafunctionartifacts3'
         REGION = 'ap-south-1'
     }
@@ -19,7 +18,7 @@ pipeline {
             steps {
                 git branch: 'main',
                     url: 'https://github.com/saadactin/react_app.git',
-                    credentialsId: 'github-credentials' // GitHub credentials
+                    credentialsId: 'github-credentials'
             }
         }
 
@@ -31,7 +30,7 @@ pipeline {
 
         stage('Build React Vite') {
             steps {
-                sh 'npm run build'  // Vite outputs to 'dist' folder
+                sh 'npm run build'
             }
         }
 
