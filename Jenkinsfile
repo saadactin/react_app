@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     tools {
-        nodejs 'NodeJS' // must match your Jenkins NodeJS installation
+        nodejs 'NodeJS'  // must exactly match Jenkins NodeJS installation
     }
 
     environment {
@@ -42,7 +42,7 @@ pipeline {
                         -Dsonar.projectKey=ReactApp \
                         -Dsonar.sources=src \
                         -Dsonar.host.url=http://host.docker.internal:9000 \
-                        -Dsonar.token=$SONAR_TOKEN \
+                        -Dsonar.login=$SONAR_TOKEN \
                         -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
                     """
                 }
@@ -51,13 +51,19 @@ pipeline {
 
         stage('Zip Build') {
             steps {
-                // Use zip-cli via npm to avoid apt-get issues
-                sh 'npm install -g zip-cli'
-                sh 'zip -r build.zip dist/'
+                sh '''
+                # Install zip if not present
+                if ! command -v zip &> /dev/null
+                then
+                    apt-get update && apt-get install -y zip
+                fi
+                cd dist
+                zip -r ../build.zip .
+                '''
             }
         }
 
-        stage('Upload to S3') {
+        stage('Upload to S3 (Trigger Lambda)') {
             steps {
                 withAWS(credentials: AWS_CREDENTIALS, region: REGION) {
                     sh "aws s3 cp build.zip s3://${S3_BUCKET}/react_app/build.zip"
