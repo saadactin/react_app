@@ -1,17 +1,13 @@
 pipeline {
-    agent {
-        docker {
-            image 'node:20-bullseye' // NodeJS + Debian
-            args '-u root:root'      // Run as root
-        }
-    }
+    agent any
 
     tools {
-        nodejs 'NodeJS'
+        nodejs 'NodeJS' // must match your Jenkins NodeJS installation
     }
 
     environment {
         SONAR_TOKEN = credentials('sonar-token')
+        AMPLIFY_APP_ID = credentials('amplify-app-id')
         AWS_CREDENTIALS = 'aws-jenkins'
         S3_BUCKET = 'lambdafunctionartifacts3'
         REGION = 'ap-south-1'
@@ -21,7 +17,8 @@ pipeline {
         stage('Checkout') {
             steps {
                 git branch: 'main',
-                    url: 'https://github.com/saadactin/react_app.git'
+                    url: 'https://github.com/saadactin/react_app.git',
+                    credentialsId: 'github-credentials'
             }
         }
 
@@ -45,7 +42,7 @@ pipeline {
                         -Dsonar.projectKey=ReactApp \
                         -Dsonar.sources=src \
                         -Dsonar.host.url=http://host.docker.internal:9000 \
-                        -Dsonar.login=$SONAR_TOKEN \
+                        -Dsonar.token=$SONAR_TOKEN \
                         -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
                     """
                 }
@@ -54,15 +51,13 @@ pipeline {
 
         stage('Zip Build') {
             steps {
-                sh '''
-                apt-get update && apt-get install -y zip
-                cd dist
-                zip -r ../build.zip .
-                '''
+                // Use zip-cli via npm to avoid apt-get issues
+                sh 'npm install -g zip-cli'
+                sh 'zip -r build.zip dist/'
             }
         }
 
-        stage('Upload to S3 (Trigger Lambda)') {
+        stage('Upload to S3') {
             steps {
                 withAWS(credentials: AWS_CREDENTIALS, region: REGION) {
                     sh "aws s3 cp build.zip s3://${S3_BUCKET}/react_app/build.zip"
