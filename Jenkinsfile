@@ -51,12 +51,11 @@ pipeline {
 
         stage('Zip Build') {
             steps {
-                // Use npm script to zip the build
                 sh 'npm run zip-build'
             }
         }
 
-        stage('Upload to S3 (Trigger Lambda)') {
+        stage('Upload to S3') {
             steps {
                 withAWS(credentials: AWS_CREDENTIALS, region: REGION) {
                     sh "aws s3 cp build.zip s3://${S3_BUCKET}/react_app/build.zip"
@@ -67,7 +66,12 @@ pipeline {
         stage('Trigger Lambda Deploy') {
             steps {
                 withAWS(credentials: AWS_CREDENTIALS, region: REGION) {
-                    sh "aws lambda invoke --function-name frontend_react --region ${REGION} response.json"
+                    sh """
+                    aws lambda invoke \
+                        --function-name lambda_function \
+                        --region ${REGION} \
+                        response.json
+                    """
                 }
             }
         }
