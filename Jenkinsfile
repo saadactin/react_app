@@ -40,12 +40,16 @@ pipeline {
             }
         }
 
+        stage('Zip Build') {
+            steps {
+                sh 'zip -r build.zip build/'
+            }
+        }
+
         stage('Upload to S3 (Trigger Lambda)') {
             steps {
                 withAWS(credentials: 'aws-jenkins', region: 'ap-south-1') {
-                    sh """
-                    aws s3 cp build/build.zip s3://lambdafunctionartifacts3/react_app/build.zip
-                    """
+                    sh 'aws s3 cp build.zip s3://lambdafunctionartifacts3/react_app/build.zip'
                 }
             }
         }
