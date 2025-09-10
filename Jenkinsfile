@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     tools {
-        nodejs 'NodeJS_22.13.1'  // must match Jenkins Global Tool name
+        nodejs 'NodeJS'  // must exactly match Jenkins NodeJS installation
     }
 
     environment {
