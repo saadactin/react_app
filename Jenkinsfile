@@ -1,15 +1,24 @@
 pipeline {
     agent any
 
+    tools {
+        nodejs 'NodeJS' // Name of NodeJS configured in Jenkins Global Tool Configuration
+    }
+
     environment {
         SONAR_TOKEN = credentials('sonar-token')
         AMPLIFY_APP_ID = credentials('amplify-app-id')
+        AWS_CREDENTIALS = 'aws-jenkins'  // AWS credentials ID in Jenkins
+        S3_BUCKET = 'lambdafunctionartifacts3'
+        REGION = 'ap-south-1'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/saadactin/react_app.git'
+                git branch: 'main',
+                    url: 'https://github.com/saadactin/react_app.git',
+                    credentialsId: 'github-credentials' // Add GitHub credentials in Jenkins
             }
         }
 
@@ -21,7 +30,7 @@ pipeline {
 
         stage('Build React Vite') {
             steps {
-                sh 'npm run build'
+                sh 'npm run build'  // Vite outputs to 'dist' folder by default
             }
         }
 
@@ -42,14 +51,25 @@ pipeline {
 
         stage('Zip Build') {
             steps {
-                sh 'zip -r build.zip build/'
+                sh '''
+                cd dist
+                zip -r ../build.zip .
+                '''
             }
         }
 
         stage('Upload to S3 (Trigger Lambda)') {
             steps {
-                withAWS(credentials: 'aws-jenkins', region: 'ap-south-1') {
-                    sh 'aws s3 cp build.zip s3://lambdafunctionartifacts3/react_app/build.zip'
+                withAWS(credentials: AWS_CREDENTIALS, region: REGION) {
+                    sh "aws s3 cp build.zip s3://${S3_BUCKET}/react_app/build.zip"
+                }
+            }
+        }
+
+        stage('Trigger Lambda Deploy') {
+            steps {
+                withAWS(credentials: AWS_CREDENTIALS, region: REGION) {
+                    sh "aws lambda invoke --function-name frontend_react --region ${REGION} response.json"
                 }
             }
         }
@@ -57,6 +77,7 @@ pipeline {
 
     post {
         always {
+            archiveArtifacts artifacts: 'build.zip', fingerprint: true
             echo 'Pipeline finished!'
         }
     }
