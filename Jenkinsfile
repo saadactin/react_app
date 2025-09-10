@@ -9,7 +9,7 @@ pipeline {
     stages {
         stage('Checkout') {
             steps {
-                git branch: 'main', url: 'https://github.com/<your-username>/<repo>.git'
+                git branch: 'main', url: 'https://github.com/saadactin/react_app.git'
             }
         }
 
