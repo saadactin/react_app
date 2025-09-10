@@ -1,16 +1,15 @@
 pipeline {
     agent any
 
-    tools {
-        nodejs 'NodeJS' // Must match the NodeJS installation name in Jenkins Global Tool Configuration (use Node 22.13.1)
-    }
-
     environment {
         SONAR_TOKEN = credentials('sonar-token')
         AMPLIFY_APP_ID = credentials('amplify-app-id')
         AWS_CREDENTIALS = 'aws-jenkins'  // AWS credentials ID in Jenkins
         S3_BUCKET = 'lambdafunctionartifacts3'
         REGION = 'ap-south-1'
+        NODE_VERSION = '22.13.1'
+        NODE_DIR = "${WORKSPACE}/node"
+        PATH = "${WORKSPACE}/node/bin:${env.PATH}"
     }
 
     stages {
@@ -18,19 +17,34 @@ pipeline {
             steps {
                 git branch: 'main',
                     url: 'https://github.com/saadactin/react_app.git',
-                    credentialsId: 'github-credentials' // GitHub credentials configured in Jenkins
+                    credentialsId: 'github-credentials' // GitHub credentials
+            }
+        }
+
+        stage('Install Node.js') {
+            steps {
+                sh '''
+                #!/bin/bash
+                if [ ! -d "$NODE_DIR" ]; then
+                    curl -sSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz | tar -xz -C $WORKSPACE
+                    mv $WORKSPACE/node-v${NODE_VERSION}-linux-x64 $NODE_DIR
+                fi
+                echo "Node version:"
+                $NODE_DIR/bin/node -v
+                $NODE_DIR/bin/npm -v
+                '''
             }
         }
 
         stage('Install Dependencies') {
             steps {
-                sh 'npm install'
+                sh '$NODE_DIR/bin/npm install'
             }
         }
 
         stage('Build React Vite') {
             steps {
-                sh 'npm run build'  // Vite outputs to 'dist' folder by default
+                sh '$NODE_DIR/bin/npm run build'
             }
         }
 
@@ -38,7 +52,7 @@ pipeline {
             steps {
                 withSonarQubeEnv('SonarQube') {
                     sh """
-                    npx sonar-scanner \
+                    $NODE_DIR/bin/npx sonar-scanner \
                         -Dsonar.projectKey=ReactApp \
                         -Dsonar.sources=src \
                         -Dsonar.host.url=http://host.docker.internal:9000 \
