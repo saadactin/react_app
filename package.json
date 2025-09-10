@@ -8,7 +8,8 @@
     "build": "vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "zip-build": "bestzip build.zip dist/*"
   },
   "dependencies": {
     "react": "^19.1.1",

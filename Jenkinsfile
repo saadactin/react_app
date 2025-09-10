@@ -51,15 +51,8 @@ pipeline {
 
         stage('Zip Build') {
             steps {
-                sh '''
-                # Install zip if not present
-                if ! command -v zip &> /dev/null
-                then
-                    apt-get update && apt-get install -y zip
-                fi
-                cd dist
-                zip -r ../build.zip .
-                '''
+                // Use npm script to zip the build
+                sh 'npm run zip-build'
             }
         }
 
