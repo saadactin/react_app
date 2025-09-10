@@ -1,5 +1,10 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'node:22.13.1' // Node pre-installed in Docker
+            args '-u root:root'   // Optional: run as root for npm permissions
+        }
+    }
 
     environment {
         SONAR_TOKEN = credentials('sonar-token')
@@ -7,9 +12,6 @@ pipeline {
         AWS_CREDENTIALS = 'aws-jenkins'  // AWS credentials ID in Jenkins
         S3_BUCKET = 'lambdafunctionartifacts3'
         REGION = 'ap-south-1'
-        NODE_VERSION = '22.13.1'
-        NODE_DIR = "${WORKSPACE}/node"
-        PATH = "${WORKSPACE}/node/bin:${env.PATH}"
     }
 
     stages {
@@ -21,30 +23,15 @@ pipeline {
             }
         }
 
-        stage('Install Node.js') {
-            steps {
-                sh '''
-                #!/bin/bash
-                if [ ! -d "$NODE_DIR" ]; then
-                    curl -sSL https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.gz | tar -xz -C $WORKSPACE
-                    mv $WORKSPACE/node-v${NODE_VERSION}-linux-x64 $NODE_DIR
-                fi
-                echo "Node version:"
-                $NODE_DIR/bin/node -v
-                $NODE_DIR/bin/npm -v
-                '''
-            }
-        }
-
         stage('Install Dependencies') {
             steps {
-                sh '$NODE_DIR/bin/npm install'
+                sh 'npm install'
             }
         }
 
         stage('Build React Vite') {
             steps {
-                sh '$NODE_DIR/bin/npm run build'
+                sh 'npm run build'  // Vite outputs to 'dist' folder
             }
         }
 
@@ -52,7 +39,7 @@ pipeline {
             steps {
                 withSonarQubeEnv('SonarQube') {
                     sh """
-                    $NODE_DIR/bin/npx sonar-scanner \
+                    npx sonar-scanner \
                         -Dsonar.projectKey=ReactApp \
                         -Dsonar.sources=src \
                         -Dsonar.host.url=http://host.docker.internal:9000 \
