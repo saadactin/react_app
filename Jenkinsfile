@@ -7,7 +7,7 @@ pipeline {
 
     environment {
         SONAR_TOKEN = credentials('sonar-token')
-        AMPLIFY_APP_ID = 'dl7klxcnyks5a'
+        AMPLIFY_APP_ID = credentials('amplify-app-id')
         AWS_CREDENTIALS = 'aws-jenkins'
         S3_BUCKET = 'lambdafunctionartifacts3'
         REGION = 'ap-south-1'
@@ -51,32 +51,19 @@ pipeline {
 
         stage('Zip Build') {
             steps {
-                // Run PowerShell script for legacy zip
-                powershell '''
-                $source = "$(System.DefaultWorkingDirectory)\\dist"
-                $zipFile = "$(System.DefaultWorkingDirectory)\\build.zip"
-                
-                if (Test-Path $zipFile) {
-                    Remove-Item $zipFile
-                }
+                sh '''
+                    # Ensure zip is installed
+                    if ! command -v zip >/dev/null 2>&1; then
+                        echo "Installing zip..."
+                        apt-get update && apt-get install -y zip
+                    fi
 
-                $fs = [System.IO.File]::Create($zipFile)
-                $fs.Write([byte[]](80,75,5,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0),0,22)
-                $fs.Close()
+                    # Clean up any old zip
+                    rm -f build.zip
 
-                $shell = New-Object -ComObject shell.application
-                $zip = $shell.NameSpace($zipFile)
-                $sourceFolder = $shell.NameSpace($source)
-
-                if ($zip -eq $null -or $sourceFolder -eq $null) {
-                    Write-Error "Failed to open zip or source folder. Check your paths."
-                    exit 1
-                }
-
-                $zip.CopyHere($sourceFolder.Items())
-                Start-Sleep -Seconds 5
-
-                Write-Output "Legacy zip created: $zipFile"
+                    # Go into dist folder and zip contents
+                    cd dist
+                    zip -r ../build.zip *
                 '''
             }
         }
@@ -84,7 +71,7 @@ pipeline {
         stage('Upload to S3') {
             steps {
                 withAWS(credentials: AWS_CREDENTIALS, region: REGION) {
-                    powershell "aws s3 cp build.zip s3://${S3_BUCKET}/react_app/build.zip"
+                    sh "aws s3 cp build.zip s3://${S3_BUCKET}/react_app/build.zip"
                 }
             }
         }
@@ -92,10 +79,10 @@ pipeline {
         stage('Trigger Lambda Deploy') {
             steps {
                 withAWS(credentials: AWS_CREDENTIALS, region: REGION) {
-                    powershell """
-                    aws lambda invoke `
-                        --function-name lambda_function `
-                        --region ${REGION} `
+                    sh """
+                    aws lambda invoke \
+                        --function-name lambda_function \
+                        --region ${REGION} \
                         response.json
                     """
                 }
