@@ -51,14 +51,40 @@ pipeline {
 
         stage('Zip Build') {
             steps {
-                sh 'npm run zip-build'
+                // Run PowerShell script for legacy zip
+                powershell '''
+                $source = "$(System.DefaultWorkingDirectory)\\dist"
+                $zipFile = "$(System.DefaultWorkingDirectory)\\build.zip"
+                
+                if (Test-Path $zipFile) {
+                    Remove-Item $zipFile
+                }
+
+                $fs = [System.IO.File]::Create($zipFile)
+                $fs.Write([byte[]](80,75,5,6,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0),0,22)
+                $fs.Close()
+
+                $shell = New-Object -ComObject shell.application
+                $zip = $shell.NameSpace($zipFile)
+                $sourceFolder = $shell.NameSpace($source)
+
+                if ($zip -eq $null -or $sourceFolder -eq $null) {
+                    Write-Error "Failed to open zip or source folder. Check your paths."
+                    exit 1
+                }
+
+                $zip.CopyHere($sourceFolder.Items())
+                Start-Sleep -Seconds 5
+
+                Write-Output "Legacy zip created: $zipFile"
+                '''
             }
         }
 
         stage('Upload to S3') {
             steps {
                 withAWS(credentials: AWS_CREDENTIALS, region: REGION) {
-                    sh "aws s3 cp build.zip s3://${S3_BUCKET}/react_app/build.zip"
+                    powershell "aws s3 cp build.zip s3://${S3_BUCKET}/react_app/build.zip"
                 }
             }
         }
@@ -66,10 +92,10 @@ pipeline {
         stage('Trigger Lambda Deploy') {
             steps {
                 withAWS(credentials: AWS_CREDENTIALS, region: REGION) {
-                    sh """
-                    aws lambda invoke \
-                        --function-name lambda_function \
-                        --region ${REGION} \
+                    powershell """
+                    aws lambda invoke `
+                        --function-name lambda_function `
+                        --region ${REGION} `
                         response.json
                     """
                 }
