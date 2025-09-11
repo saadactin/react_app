@@ -1,16 +1,24 @@
 pipeline {
-    agent any
+    agent any   // run directly on the Jenkins agent
+
+    tools {
+        nodejs 'NodeJS'  // must match your Jenkins NodeJS installation name
+    }
 
     environment {
-        SONARQUBE = credentials('sonar-token')
-        AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
-        AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
+        SONAR_TOKEN     = credentials('sonar-token')
+        AMPLIFY_APP_ID  = credentials('amplify-app-id')
+        AWS_CREDENTIALS = 'aws-jenkins'
+        S3_BUCKET       = 'lambdafunctionartifacts3'
+        REGION          = 'ap-south-1'
     }
 
     stages {
         stage('Checkout') {
             steps {
-                git url: 'https://github.com/saadactin/react_app.git', branch: 'main', credentialsId: 'github-credentials'
+                git branch: 'main',
+                    url: 'https://github.com/saadactin/react_app.git',
+                    credentialsId: 'github-credentials'
             }
         }
 
@@ -29,14 +37,14 @@ pipeline {
         stage('Run SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('SonarQube') {
-                    sh '''
-                        npx sonar-scanner \
-                          -Dsonar.projectKey=ReactApp \
-                          -Dsonar.sources=src \
-                          -Dsonar.host.url=http://host.docker.internal:9000 \
-                          -Dsonar.token=$SONARQUBE \
-                          -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-                    '''
+                    sh """
+                    npx sonar-scanner \
+                        -Dsonar.projectKey=ReactApp \
+                        -Dsonar.sources=src \
+                        -Dsonar.host.url=http://host.docker.internal:9000 \
+                        -Dsonar.token=$SONAR_TOKEN \
+                        -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
+                    """
                 }
             }
         }
@@ -44,11 +52,11 @@ pipeline {
         stage('Zip Build') {
             steps {
                 sh '''
-                    if ! command -v zip &> /dev/null
-                    then
-                      echo "Installing zip..."
-                      apt-get update && apt-get install -y zip
+                    if ! command -v zip >/dev/null 2>&1; then
+                        echo "Installing zip..."
+                        sudo apt-get update && sudo apt-get install -y zip
                     fi
+
                     rm -f build.zip
                     cd dist
                     zip -r ../build.zip *
@@ -58,20 +66,22 @@ pipeline {
 
         stage('Upload to S3') {
             steps {
-                withAWS(region: 'ap-south-1', credentials: 'aws-credentials') {
-                    sh 'aws s3 cp build.zip s3://my-react-app-builds/build.zip --acl public-read'
+                withAWS(credentials: AWS_CREDENTIALS, region: REGION) {
+                    sh "aws s3 cp build.zip s3://${S3_BUCKET}/react_app/build.zip"
                 }
             }
         }
 
         stage('Trigger Lambda Deploy') {
             steps {
-                sh '''
-                  aws lambda invoke \
-                    --function-name my-react-app-deploy \
-                    --payload '{"action":"deploy"}' \
-                    response.json
-                '''
+                withAWS(credentials: AWS_CREDENTIALS, region: REGION) {
+                    sh """
+                    aws lambda invoke \
+                        --function-name lambda_function \
+                        --region ${REGION} \
+                        response.json
+                    """
+                }
             }
         }
     }
