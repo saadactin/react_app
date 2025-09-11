@@ -1,8 +1,13 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'node:18-bullseye'   // Debian-based image with apt
+            args '-u root'             // run as root so you can install
+        }
+    }
 
     tools {
-        nodejs 'NodeJS'  // must exactly match Jenkins NodeJS installation
+        nodejs 'NodeJS'
     }
 
     environment {
@@ -14,6 +19,15 @@ pipeline {
     }
 
     stages {
+        stage('Setup Tools') {
+            steps {
+                sh '''
+                  apt-get update
+                  apt-get install -y zip awscli
+                '''
+            }
+        }
+
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -42,7 +56,7 @@ pipeline {
                         -Dsonar.projectKey=ReactApp \
                         -Dsonar.sources=src \
                         -Dsonar.host.url=http://host.docker.internal:9000 \
-                        -Dsonar.login=$SONAR_TOKEN \
+                        -Dsonar.token=$SONAR_TOKEN \
                         -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
                     """
                 }
@@ -52,16 +66,7 @@ pipeline {
         stage('Zip Build') {
             steps {
                 sh '''
-                    # Ensure zip is installed
-                    if ! command -v zip >/dev/null 2>&1; then
-                        echo "Installing zip..."
-                        apt-get update && apt-get install -y zip
-                    fi
-
-                    # Clean up any old zip
                     rm -f build.zip
-
-                    # Go into dist folder and zip contents
                     cd dist
                     zip -r ../build.zip *
                 '''
