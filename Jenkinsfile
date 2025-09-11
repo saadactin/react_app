@@ -1,33 +1,19 @@
 pipeline {
-    agent {
-        docker {
-            image 'node:18-bullseye'   // Debian-based image with apt
-            args '-u root'             // run as root so you can install
-        }
-    }
+    agent any   // run directly on the Jenkins agent
 
     tools {
-        nodejs 'NodeJS'
+        nodejs 'NodeJS'  // must match your Jenkins NodeJS installation name
     }
 
     environment {
-        SONAR_TOKEN = credentials('sonar-token')
-        AMPLIFY_APP_ID = credentials('amplify-app-id')
+        SONAR_TOKEN     = credentials('sonar-token')
+        AMPLIFY_APP_ID  = credentials('amplify-app-id')
         AWS_CREDENTIALS = 'aws-jenkins'
-        S3_BUCKET = 'lambdafunctionartifacts3'
-        REGION = 'ap-south-1'
+        S3_BUCKET       = 'lambdafunctionartifacts3'
+        REGION          = 'ap-south-1'
     }
 
     stages {
-        stage('Setup Tools') {
-            steps {
-                sh '''
-                  apt-get update
-                  apt-get install -y zip awscli
-                '''
-            }
-        }
-
         stage('Checkout') {
             steps {
                 git branch: 'main',
@@ -66,6 +52,11 @@ pipeline {
         stage('Zip Build') {
             steps {
                 sh '''
+                    if ! command -v zip >/dev/null 2>&1; then
+                        echo "Installing zip..."
+                        sudo apt-get update && sudo apt-get install -y zip
+                    fi
+
                     rm -f build.zip
                     cd dist
                     zip -r ../build.zip *
