@@ -7,7 +7,7 @@ pipeline {
 
     environment {
         SONAR_TOKEN = credentials('sonar-token')
-        AMPLIFY_APP_ID = credentials('amplify-app-id')
+        AMPLIFY_APP_ID = 'dl7klxcnyks5a'
         AWS_CREDENTIALS = 'aws-jenkins'
         S3_BUCKET = 'lambdafunctionartifacts3'
         REGION = 'ap-south-1'
