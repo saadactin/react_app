@@ -1,57 +1,41 @@
 pipeline {
     agent {
         kubernetes {
-            yaml '''
+            yaml """
 apiVersion: v1
 kind: Pod
 spec:
   containers:
-  - name: dind
-    image: docker:dind
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:latest
     command:
     - cat
     tty: true
-    securityContext:
-      privileged: true
-    env:
-    - name: DOCKER_TLS_CERTDIR
-      value: ""
     volumeMounts:
     - name: regcred
-      mountPath: /kaniko/.docker   # Nexus credentials secret
+      mountPath: /kaniko/.docker
   volumes:
   - name: regcred
     secret:
-      secretName: regcred
-'''
+      secretName: regcred   # Nexus Docker credentials
+"""
         }
     }
 
     environment {
         REGISTRY = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-        IMAGE = "saad:latest"   // <-- your image name
+        IMAGE = "saad:latest"
     }
 
     stages {
-        stage('Build Docker Image') {
+        stage('Build & Push Docker Image') {
             steps {
-                container('dind') {
+                container('kaniko') {
                     sh '''
-                        docker build -t $IMAGE .
-                        docker image ls
-                    '''
-                }
-            }
-        }
-
-        stage('Push to Nexus') {
-            steps {
-                container('dind') {
-                    sh '''
-                        # Push using secret-mounted credentials
-                        docker push $REGISTRY/$IMAGE
-                        docker pull $REGISTRY/$IMAGE
-                        docker image ls
+                        /kaniko/executor \
+                          --context `pwd` \
+                          --dockerfile Dockerfile \
+                          --destination $REGISTRY/$IMAGE
                     '''
                 }
             }
