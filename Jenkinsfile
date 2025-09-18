@@ -1,38 +1,43 @@
 pipeline {
-    agent any   // run on any available Jenkins agent
-    
+    agent {
+        kubernetes {
+            yaml """
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: kaniko
+    image: gcr.io/kaniko-project/executor:latest
+    command:
+    - cat
+    tty: true
+    volumeMounts:
+    - name: kaniko-secret
+      mountPath: /kaniko/.docker
+  volumes:
+  - name: kaniko-secret
+    secret:
+      secretName: regcred   # <-- this must be your Docker/Nexus registry secret
+"""
+        }
+    }
+
     environment {
-        REGISTRY_URL = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
-        REGISTRY_REPO = "saadrepo"
-        IMAGE_NAME = "face-detection"
-        IMAGE_TAG = "v1"
+        REGISTRY = "nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085"
+        IMAGE = "saad:latest"   // <-- renamed image here
     }
 
     stages {
-        stage('Build Docker Image') {
+        stage('Build & Push with Kaniko') {
             steps {
-                sh '''
-                    docker build -t $IMAGE_NAME:latest .
-                    docker image ls
-                '''
-            }
-        }
-
-        stage('Login to Nexus Registry') {
-            steps {
-                sh '''
-                    docker login $REGISTRY_URL -u admin -p Changeme@2025
-                '''
-            }
-        }
-
-        stage('Tag & Push Image') {
-            steps {
-                sh '''
-                    docker tag $IMAGE_NAME:latest $REGISTRY_URL/$REGISTRY_REPO/$IMAGE_NAME:$IMAGE_TAG
-                    docker push $REGISTRY_URL/$REGISTRY_REPO/$IMAGE_NAME:$IMAGE_TAG
-                    docker image ls
-                '''
+                container('kaniko') {
+                    sh '''
+                    /kaniko/executor \
+                      --context `pwd` \
+                      --dockerfile Dockerfile \
+                      --destination $REGISTRY/$IMAGE
+                    '''
+                }
             }
         }
     }
