@@ -1,95 +1,86 @@
 pipeline {
-    agent any   // run directly on the Jenkins agent
-
-    tools {
-        nodejs 'NodeJS'  // must match your Jenkins NodeJS installation name
-    }
-
-    environment {
-        SONAR_TOKEN     = credentials('sonar-token')
-        AMPLIFY_APP_ID  = credentials('amplify-app-id')
-        AWS_CREDENTIALS = 'aws-jenkins'
-        S3_BUCKET       = 'lambdafunctionartifacts3'
-        REGION          = 'ap-south-1'
+    agent {
+        kubernetes {
+            yaml '''
+apiVersion: v1
+kind: Pod
+spec:
+  containers:
+  - name: sonar-scanner
+    image: sonarsource/sonar-scanner-cli
+    command:
+    - cat
+    tty: true
+  - name: kubectl
+    image: bitnami/kubectl:latest
+    command:
+    - cat
+    tty: true
+    securityContext:
+      runAsUser: 0
+      readOnlyRootFilesystem: false
+    env:
+    - name: KUBECONFIG
+      value: /kube/config        
+    volumeMounts:
+    - name: kubeconfig-secret
+      mountPath: /kube/config
+      subPath: kubeconfig
+  - name: dind
+    image: docker:dind
+    args: ["--registry-mirror=https://mirror.gcr.io", "--storage-driver=overlay2"]
+    securityContext:
+      privileged: true  # Needed to run Docker daemon
+    env:
+    - name: DOCKER_TLS_CERTDIR
+      value: ""  # Disable TLS for simplicity
+    volumeMounts:
+    - name: docker-config
+      mountPath: /etc/docker/daemon.json
+      subPath: daemon.json
+  volumes:
+  - name: docker-config
+    configMap:
+      name: docker-daemon-config
+  - name: kubeconfig-secret
+    secret:
+      secretName: kubeconfig-secret
+'''
+        }
     }
 
     stages {
-        stage('Checkout') {
+        stage('Build Docker Image') {
             steps {
-                git branch: 'main',
-                    url: 'https://github.com/saadactin/react_app.git',
-                    credentialsId: 'github-credentials'
-            }
-        }
-
-        stage('Install Dependencies') {
-            steps {
-                sh 'npm install'
-            }
-        }
-
-        stage('Build React Vite') {
-            steps {
-                sh 'npm run build'
-            }
-        }
-
-        stage('Run SonarQube Analysis') {
-            steps {
-                withSonarQubeEnv('SonarQube') {
-                    sh """
-                    npx sonar-scanner \
-                        -Dsonar.projectKey=ReactApp \
-                        -Dsonar.sources=src \
-                        -Dsonar.host.url=http://host.docker.internal:9000 \
-                        -Dsonar.token=$SONAR_TOKEN \
-                        -Dsonar.javascript.lcov.reportPaths=coverage/lcov.info
-                    """
+                container('dind') {
+                    sh '''
+                        sleep 15
+                        docker build -t face-detection:latest .
+                        docker image ls
+                    '''
                 }
             }
         }
 
-        stage('Zip Build') {
+        stage('Login to Docker Registry') {
             steps {
-                sh '''
-                    if ! command -v zip >/dev/null 2>&1; then
-                        echo "Installing zip..."
-                        sudo apt-get update && sudo apt-get install -y zip
-                    fi
-
-                    rm -f build.zip
-                    cd dist
-                    zip -r ../build.zip *
-                '''
-            }
-        }
-
-        stage('Upload to S3') {
-            steps {
-                withAWS(credentials: AWS_CREDENTIALS, region: REGION) {
-                    sh "aws s3 cp build.zip s3://${S3_BUCKET}/react_app/build.zip"
+                container('dind') {
+                    sh 'docker --version'
+                    sh 'sleep 10'
+                    sh 'docker login nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085 -u admin -p Changeme@2025'
                 }
             }
         }
 
-        stage('Trigger Lambda Deploy') {
+        stage('Build - Tag - Push') {
             steps {
-                withAWS(credentials: AWS_CREDENTIALS, region: REGION) {
-                    sh """
-                    aws lambda invoke \
-                        --function-name lambda_function \
-                        --region ${REGION} \
-                        response.json
-                    """
+                container('dind') {
+                    sh 'docker tag face-detection:latest nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/saadrepo/face-detection:v1'
+                    sh 'docker push nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/saadrepo/face-detection:v1'
+                    sh 'docker pull nexus-service-for-docker-hosted-registry.nexus.svc.cluster.local:8085/saadrepo/face-detection:v1'
+                    sh 'docker image ls'
                 }
             }
-        }
-    }
-
-    post {
-        always {
-            archiveArtifacts artifacts: 'build.zip', fingerprint: true
-            echo 'Pipeline finished!'
         }
     }
 }

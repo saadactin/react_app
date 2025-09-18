@@ -1,0 +1,6 @@
+projectKey=sjkbabjc
+serverUrl=http://localhost:9000
+serverVersion=25.9.0.112764
+dashboardUrl=http://localhost:9000/dashboard?id=sjkbabjc
+ceTaskId=f2d9b954-dffd-498a-ac28-5a1b27c9e70e
+ceTaskUrl=http://localhost:9000/api/ce/task?id=f2d9b954-dffd-498a-ac28-5a1b27c9e70e
